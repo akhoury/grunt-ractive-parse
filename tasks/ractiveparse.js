@@ -199,7 +199,14 @@
                   return string;
                 };
 
-            return '\n'+ tabs() + name + ' : ' + JSON.stringify(Ractive.parse(html));
+            var str;
+            try {
+                str = '\n'+ tabs() + name + ' : ' + JSON.stringify(Ractive.parse(html));
+            } catch(e) {
+                grunt.log.writeln('File "' + chalk.red(filename) + '" Errored.');
+                throw e;
+            }
+            return str;
         }
 
         return arrify(info);
