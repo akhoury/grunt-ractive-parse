@@ -10,6 +10,7 @@
   'use strict';
   var Ractive = require('ractive'),
       chalk = require('chalk'),
+      nsdeclare = require('nsdeclare'),
       fs = require('fs'),
       path = require('path');
 
@@ -31,7 +32,10 @@
             templateOptions = '\n';
 
         options = this.options({
-          type: 'javascript' // type: 'javascript' (default) || 'extjs'
+          type: 'javascript', // type: 'javascript' (default) || 'extjs',
+
+          namespace: null,
+          namespaceEqual: 'templates.templates'
         });
 
         // Identify the base directory using the path of the first element
@@ -59,7 +63,6 @@
 
             // Define destination type
             options.destSyntax = setType(file.dest);
-
             // Parse the template src files
             file.src.map(parse);
 
@@ -68,8 +71,8 @@
             templateFile = file.templateFile;
 
             // Join parsed files and write them to a new file.
-            grunt.file.write(file.dest,
-                options.destSyntax + " {" + templateOptions + templates.join(",\n") + "\n\n});");
+              grunt.file.write(file.dest,
+                options.destSyntax + " {" + templateOptions + templates.join(",\n") + "\n\n\t};" + closingSyntax());
 
             // Log success.
             grunt.log.writeln('File "' + chalk.cyan(file.dest) + '" created.');
@@ -84,7 +87,7 @@
 
       switch (options.type){
         case 'javascript':
-          return 'var templates =';
+          return (options.namespace ? '(function(){\n' + nsdeclare(options.namespace) : '') + '\nvar templates =';
 
         case 'extjs':
           var dotNotationPath,
@@ -101,6 +104,21 @@
           // warning
           grunt.fail.warn('Unrecognized type. Please choose "javascript" or "extjs"\n');
           return false;
+      }
+    }
+
+    function closingSyntax () {
+      switch (options.type){
+        case 'javascript':
+          return options.namespace ?
+            '\n\t' + nsdeclare(options.namespace, {response: 'details'}).namespace + ' = ' + options.namespaceEqual + ';'
+            + '\n})();'
+            : '';
+        case 'extjs':
+          return ');';
+        default:
+          grunt.fail.warn('Unrecognized type. Please choose "javascript" or "extjs"\n');
+          return '';
       }
     }
 
@@ -164,7 +182,7 @@
 
     function parse(template){
 
-      if (!templateJson.templates) {
+      if (!templateJson.templates) {
         templateJson.templates = [];
       }
 
@@ -173,12 +191,11 @@
 
     function dirTree(filename) {
         var stats = fs.lstatSync(filename),
-            matchExtension = new RegExp(/\.\w*/),
+            matchExtension = new RegExp(/\.\w*$/),
             name = path.basename(filename).replace(matchExtension, ''),
             info = {
                 path: filename
             };
-
         if (stats.isDirectory()) {
             info[name] = '\t'+fs.readdirSync(filename).map(function(child) {
                 return dirTree(filename + '/' + child);
@@ -201,7 +218,7 @@
 
             var str;
             try {
-                str = '\n'+ tabs() + name + ' : ' + JSON.stringify(Ractive.parse(html));
+                str = '\n'+ tabs() + '\'' + name + '\': ' + JSON.stringify(Ractive.parse(html));
             } catch(e) {
                 grunt.log.writeln('File "' + chalk.red(filename) + '" Errored.');
                 throw e;
@@ -212,7 +229,10 @@
         return arrify(info);
     }
 
-    function arrify(templateObject) {
+    function arrify(templateObject, options) {
+        options = options || {};
+        options.nokey = options.nokey || false;
+
         var returnArray = [],
             tabs = '\t\t';
 
